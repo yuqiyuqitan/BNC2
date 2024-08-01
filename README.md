@@ -1,2 +1,2 @@
 # BNC2
-This is a repository for BNC2 paper
+This is a code repository for BNC2 paper
