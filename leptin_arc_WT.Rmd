@@ -1,0 +1,174 @@
+---
+title: "leptin_arc_PT"
+author: "Yuqi Tan"
+date: "10/24/2021"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(Seurat)
+library(Matrix)
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+library(viridis)
+set.seed(123)
+
+save_dir = "./data/"
+```
+
+|             |     ARC     |
+| ----------- | ----------- |
+| all cells   | 25 clusters |
+| non-neuronal clusters | 20/21/23/24|
+| Neuronal clusters | 0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17/18/19/22|
+| Neurons located outside the region   | None |
+| Neurons located within the region   | 0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17/18/19/22 |
+| Inhibitory neurons   | 0/1/2/3/4/5/7/8/10/11/14/17/18/19 |
+| Excitatory neurons  | 6/9/12/13/15/16/22| 
+
+```{r, eval=FALSE}
+all_singlets = readRDS(paste0(save_dir, "leptin_allcell_sinlgets.rds"))
+arc_leptin <- subset(all_singlets, idents = c("Hashtag1","Hashtag5","Hashtag7"))
+dim(arc_leptin)
+#[1] 23820  3935
+
+rm(all_singlets)
+arc_leptin <- NormalizeData(arc_leptin, normalization.method = "LogNormalize", scale.factor = 10000)
+
+arc_ob = readRDS(paste0(save_dir,"ob_ARC_sinlgets.rds"))
+arc_ob <- NormalizeData(arc_ob, normalization.method = "LogNormalize", scale.factor = 10000)
+
+arc_wt = readRDS(paste0(save_dir,"wt_ARC_sinlgets.rds"))
+arc_wt <- NormalizeData(arc_wt, normalization.method = "LogNormalize", scale.factor = 10000)
+#integrate the three conditions with batch corrected 
+arc.list = list(arc_ob, arc_wt, arc_leptin)
+
+#Slc32a1 is in the expression
+all_genes <- lapply(arc.list, row.names) %>% Reduce(intersect, .)
+
+#"Slc32a1" does not in top 4000 variable genes
+arc.anchors <- FindIntegrationAnchors(object.list = arc.list, anchor.features = all_genes)
+
+#renaming 
+arc.combined <- IntegrateData(anchorset = arc.anchors, features = all_genes)
+
+#standard RNA processing
+#arc.combined[["percent.mt"]] <- PercentageFeatureSet(arc.combined, pattern = "^MT-", assay = 'RNA')
+DefaultAssay(arc.combined) = "integrated"
+arc.combined = ScaleData(arc.combined, verbose = FALSE)
+arc.combined <- RunPCA(arc.combined, npcs = 50, verbose = FALSE)
+arc.combined <- RunUMAP(arc.combined, reduction = "pca", dims = 1:30)
+arc.combined <- FindNeighbors(arc.combined, reduction = "pca", dims = 1:30)
+arc.combined <- FindClusters(arc.combined, resolution = 0.55)
+
+arc.combined <-readRDS(file = paste0(save_dir +"arc.combined_111621.rds"))
+Idents(arc.combined) = arc.combined$orig.ident
+arc.combined.wt = subset(x = arc.combined, idents ='wt')
+Idents(arc.combined.wt) = arc.combined.wt$seurat_clusters
+```
+
+```{r load data}
+arc.combined.wt = readRDS("./Processed_data/arc.combined.wt.rds")
+arc.combined.wt 
+```
+
+```{r compute_lepr_exp}
+arc.combined.wt.sub = subset(x = arc.combined.wt, idents =c('0','3','17'))
+
+arc_markers2 = c( "Lepr","Bnc2")
+obj = VlnPlot(arc.combined.wt.sub, features = arc_markers2, pt.size = 0, same.y.lims = TRUE, stack = TRUE, flip = TRUE)
+
+df_sub = data.frame(obj$data)
+colnames(df_sub) = c("Gene", "Expression", "Cluster")
+
+ggplot(data=df_sub, aes(x=Cluster, y=Expression, fill =Gene)) +
+  geom_boxplot(notch=FALSE)+ scale_fill_brewer(palette="Set2")+
+  theme_classic()
+
+
+# Assuming df_sub is your data frame with columns Cluster, Expression, and Gene
+
+# Calculate the mean expression for each combination of Cluster and Gene
+mean_expression <- aggregate(Expression ~ Cluster + Gene, data = df_sub, mean)
+
+# Create the bar plot
+ggplot(data = mean_expression, aes(x = Cluster, y = Expression, fill = Gene)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  
+  # Use the Set2 color palette
+  scale_fill_brewer(palette = "Set2") +
+  
+  # Apply the classic theme
+  theme_classic()
+```
+
+```{R}
+table(Idents(arc.combined.wt),arc.combined.wt@meta.data$condition)
+
+Idents(arc.combined.wt) = arc.combined.wt$seurat_clusters
+
+arc.combined.wt.neuron = subset(arc.combined.wt, idents =c( '6', '12', '13', '16', '22', 
+                                                            '0','1','2','3','4', '5', '7', '8','10', '11', '14', '17', '18', '19'))
+arc.combined.wt.neuron$neuron_type =  ifelse(test = arc.combined.wt.neuron$seurat_clusters %in% c('6', '12', '13', '16', '22'), yes = "Excitatory_neuron", no = "Inhibitory_neuron")
+
+Idents(arc.combined.wt.neuron) <- factor(Idents(arc.combined.wt.neuron), levels = c( '6', '12', '13', '16', '22', 
+                                                                                     '0','1','2','3','4', '5', '7', '8','10', '11', '14', '17', '18', '19'))
+
+
+Idents(arc.combined.wt.neuron) <- factor(Idents(arc.combined.wt.neuron), levels = c( '6', '12', '13', '16', '22', 
+                                                                                     '0','3','17','1','2','4', '5', '7', '8','10', '11', '14', '18', '19'))
+
+
+
+p1 <- DimPlot(arc.combined.wt, reduction = "umap", group.by = "condition")
+p2 <- DimPlot(arc.combined.wt, reduction = "umap", cols = NULL, label = TRUE, label.size = 4) + NoLegend()
+             
+p2
+```
+
+```{R}
+#Dot plot
+
+markers.to.plot <- c("Lepr","Npy","Pomc","Bnc2")
+DotPlot(
+  arc.combined.wt.neuron,
+  features = markers.to.plot,
+  scale.min = 30,
+  scale.max = 100,
+  col.min = -2,
+  col.max = 4,
+  cols = c("lightgrey", "darkblue")
+) + RotatedAxis() 
+
+genes <- c("Lepr","Npy","Pomc","Bnc2")
+
+VlnPlot(
+  arc.combined.wt.neuron,
+  features = genes,  # Specify the genes you want to plot
+  pt.size = 0,
+  same.y.lims = TRUE,
+  stack = TRUE,
+  flip = TRUE 
+) + scale_y_continuous(limits = c(0, 2))
+
+#boxplot(arc.combined.wt.neuron, features = genes,  pt.size = 0,
+#        same.y.lims = TRUE,
+#        stack = TRUE,
+#        flip = TRUE )
+
+
+DoHeatmap(arc.combined.wt.neuron, features = genes,
+          group.colors = c(magma(5, begin = 0.7),viridis(14, begin = 0.4, end = 0.9))) +
+  theme(text = element_text(size = 6)) 
+
+
+DoHeatmap(arc.combined.wt.neuron, features = arc_markers2, disp.min = 0,
+          group.colors = c(magma(5, begin = 0.7),viridis(14, begin = 0.4, end = 0.9))) +
+  theme(text = element_text(size = 6))
+
+```
+```{r}
+print(sessionInfo())
+```
+
