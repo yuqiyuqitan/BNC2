@@ -70,7 +70,14 @@ Idents(arc.combined.wt) = arc.combined.wt$seurat_clusters
 
 ```{r load data}
 arc.combined.wt = readRDS("./Processed_data/arc.combined.wt.rds")
-arc.combined.wt 
+arc.combined.wt
+
+# Supplementary Fig 1a
+DimPlot(arc.combined.wt, reduction = "umap", group.by = "seurat_clusters")
+
+# Supplementary Fig 1b
+marker_list = c("Tubb3","Snap25","Syt1","Elavl4","Rax","Ccdc153","Mag","Cspg4","Aif1","Slco1c1","Mustn1","Gfap","Lum","Tshb","Cck","Vim","Sox9","Cldn5","C1qa","Olig1","Cd9","Pllp")
+VlnPlot(arc.combined.wt, features = marker_list, pt.size = 0, same.y.lims = TRUE, stack = TRUE, flip = TRUE)
 ```
 
 ```{r compute_lepr_exp}
@@ -103,11 +110,19 @@ ggplot(data = mean_expression, aes(x = Cluster, y = Expression, fill = Gene)) +
   theme_classic()
 ```
 
-```{R}
+```{r}
 table(Idents(arc.combined.wt),arc.combined.wt@meta.data$condition)
 
 Idents(arc.combined.wt) = arc.combined.wt$seurat_clusters
 
+
+arc.combined.wt.neuron = subset(arc.combined.wt, idents =c( '6', '12', '13', '16', '22', 
+                                                            '0','1','2','3','4', '5', '7', '8', '9', '10', '11', '14', '15', '17', '18', '19'))
+# Figure 1b
+DimPlot(arc.combined.wt.neuron, reduction = "umap", group.by = "seurat_clusters")
+```
+
+```{R}
 arc.combined.wt.neuron = subset(arc.combined.wt, idents =c( '6', '12', '13', '16', '22', 
                                                             '0','1','2','3','4', '5', '7', '8','10', '11', '14', '17', '18', '19'))
 arc.combined.wt.neuron$neuron_type =  ifelse(test = arc.combined.wt.neuron$seurat_clusters %in% c('6', '12', '13', '16', '22'), yes = "Excitatory_neuron", no = "Inhibitory_neuron")
@@ -163,9 +178,15 @@ DoHeatmap(arc.combined.wt.neuron, features = genes,
   theme(text = element_text(size = 6)) 
 
 
+# Figure 1C
+markers.to.plot <- c("Npy","Alk","Dach2","Unc13c","Tmem26","Pomc","Sntb1","Vgll3","Rgs6","Tcf7l2","Sv2b","Col24a1","Pdgfd","Colec12","Megf11","Hydin","Gm20754","Lmo7","Nfib","Mcc","Qrfpr","Pdzrn3","Gem","Ccbe1","Sim1","Bnc2","Sema3e","Lef1","Lhx9","Nr5a1")
+DotPlot(arc.combined.wt.neuron, features = markers.to.plot, cols = c("blue","red"), dot.scale = 8,) + RotatedAxis()
+DotPlot(arc.wt.neuron, features = markers.to.plot, scale.min = 70, scale.max = 100, col.min = 1, col.max = 2, cols = c("lightgrey","darkblue")) + RotatedAxis()
+
+# Figure 1D
 DoHeatmap(arc.combined.wt.neuron, features = arc_markers2, disp.min = 0,
           group.colors = c(magma(5, begin = 0.7),viridis(14, begin = 0.4, end = 0.9))) +
-  theme(text = element_text(size = 6))
+          theme(text = element_text(size = 6))
 
 ```
 ```{r}
